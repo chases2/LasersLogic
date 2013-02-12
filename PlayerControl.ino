@@ -1,7 +1,7 @@
 /*
 PlayerControl.ino
 Amelia Peterson
-1/11/13
+1/12/13
 
 This code manages the I/O for the player's arduino (IR and RF transmitters and receivers, triggers, item selection),
 damage, status conditions, and items.
@@ -21,11 +21,11 @@ const int item = A0;			//Analog input for item selection (currently selects one 
 const int IR_input = 3;  		//Must be a PWM pin - IR Receiver Data Output
 const int IR_output = 2;		//Anode of IR LED
 const int IR_trigger = 1;		//Normally GND, Power to trigger
-IRrecv irrecv(RF_input); 	     //Create an IRrecv object
-decode_results decodedSignal ; 	     //Stores results from IR detector
-char Stats[2] = {100, 5};  	//Health, Attack
+IRrecv irrecv(RF_input); 	     	//Create an IRrecv object
+decode_results decodedSignal ; 	     	//Stores results from IR detector
+char Stats[2] = {100, 5};  		//Health, Attack
 long items[3] = {0xA60A, 0xA00A, 0xA81E};//Magic Missile, Mass Heal, 30 MASSIVE
-bool Team = 0;     		//0 or 1
+bool Team = 0;     			//0 or 1
 IRsend irsend;
 
 void setup(){
