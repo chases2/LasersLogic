@@ -7,7 +7,7 @@ Header	Team	Carriers	Code	Byte 3-4	Description
 		Berserk		0x001	0x11, 0-63	Causes guns, items to be set off erratically for a certain period of t
 		Buff Atk	0x010	0x0, 0-127	Increases attack stat.
 		Debuff Atk	0x010	0x1, 0-127	Decreases attack stat.
-		Clear Status	0x011	0-256		Clears status condition, use last two bytes to specify condition.
+		Clear Status	0x011	0-255		Clears status condition, use last two bytes to specify condition.
 		Massive		0x100	0-255		Does damage between 1 and 256 that ignores any defense bufs or armor.
 		Suffocation	0x101	0-255		Does damage over time, decreases attack and strength stats over time.
 		Fire	0x110	0x00, 	0-63		Does fire damage between 1 and 64
