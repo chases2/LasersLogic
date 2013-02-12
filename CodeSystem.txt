@@ -1,20 +1,20 @@
 Header	Team	Carriers	Code	Byte 3-4	Description
-0xA	1 or 0	Normal		0x000	0x1, 0-127	
-		Heal		0x000	0x0, 0-127	
-		Poison		0x001	0x00, 0-63	
-		Disable		0x001	0x01, 0-63	
-		Paralysis	0x001	0x10, 0-63	
-		Berserk		0x001	0x11, 0-63	
-		Buff Atk	0x010	0x0, 0-127	
-		Debuff Atk	0x010	0x1, 0-127	
-		Clear Status	0x011	0-256	
-		Massive		0x100	0-255	
-		Suffocation	0x101	0-255	
-		Fire	0x110	0x00, 	0-63	
-		Cold	0x110	0x01, 	0-63	
-		Shock	0x110	0x11, 	0-63	
-		Revive	0x111	0x0, 	0-127	
-		Killing Blow	0x111	0x1, 0-127	
+0xA	1 or 0	Normal		0x000	0x1, 0-127	Does normal damage between 1 and 128.
+		Heal		0x000	0x0, 0-127	Heals for a value between 1 and 128.
+		Poison		0x001	0x00, 0-63	Does damage over a certain period of time.
+		Disable		0x001	0x01, 0-63	Disables weapon for a certain period of time.
+		Paralysis	0x001	0x10, 0-63	Disables all weapons and items for a certain period of time.
+		Berserk		0x001	0x11, 0-63	Causes guns, items to be set off erratically for a certain period of t
+		Buff Atk	0x010	0x0, 0-127	Increases attack stat.
+		Debuff Atk	0x010	0x1, 0-127	Decreases attack stat.
+		Clear Status	0x011	0-256		Clears status condition, use last two bytes to specify condition.
+		Massive		0x100	0-255		Does damage between 1 and 256 that ignores any defense bufs or armor.
+		Suffocation	0x101	0-255		Does damage over time, decreases attack and strength stats over time.
+		Fire	0x110	0x00, 	0-63		Does fire damage between 1 and 64
+		Cold	0x110	0x01, 	0-63		Does cold damage between 1 and 64
+		Shock	0x110	0x11, 	0-63		Does shock damage between 1 and 64
+		Revive	0x111	0x0, 	0-127		Revives player, 0-127 value determines how much health is restored.
+		Killing Blow	0x111	0x1, 0-127	Permanently kills player if they are bleeding out.
 					
 					
 					
