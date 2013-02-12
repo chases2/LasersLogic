@@ -14,13 +14,13 @@ Notes:
 #include <VirtualWire.h>
 #include <IRremote.h>
 
-int RF_input = 9;  		//Must be a PWM pin - RF Receiver Digital Output
-int RF_output = 8;		//RF Transmitter Digital input
-int RF_trigger = 7;		//Normally GND, Power to trigger
-int item = A0;			//Analog input for item selection (currently selects one of three items)
-int IR_input = 3;  		//Must be a PWM pin - IR Receiver Data Output
-int IR_output = 2;		//Anode of IR LED
-int IR_trigger = 1;		//Normally GND, Power to trigger
+const int RF_input = 9;  		//Must be a PWM pin - RF Receiver Digital Output
+const int RF_output = 8;		//RF Transmitter Digital input
+const int RF_trigger = 7;		//Normally GND, Power to trigger
+const int item = A0;			//Analog input for item selection (currently selects one of three items)
+const int IR_input = 3;  		//Must be a PWM pin - IR Receiver Data Output
+const int IR_output = 2;		//Anode of IR LED
+const int IR_trigger = 1;		//Normally GND, Power to trigger
 IRrecv irrecv(RF_input); 	     //Create an IRrecv object
 decode_results decodedSignal ; 	     //Stores results from IR detector
 char Stats[2] = {100, 5};  	//Health, Attack
@@ -37,11 +37,11 @@ void setup(){
   vw_setup(2000);	        // Bits per sec
   vw_set_rx_pin(RF_output);
   vw_rx_start();                // Start the receiver PLL running
-  pinMode(IR_trigger, INPUT);
+  pinMode(RF_trigger, INPUT);
   //IR Setup//
-    pinMode(IR_input, OUTPUT);  //set pin 3 to IR input
+  pinMode(IR_input, OUTPUT);  //set pin 3 to IR input
   irrecv.enableIRIn();          //Begin the receiving process. This will enable the timer interrupt which consumes a small amount of CPU every 50 Âµs.
-  pinMode(RF_trigger, OUTPUT);  
+  pinMode(IR_trigger, OUTPUT);  
 }
 
 void IR_fire(){
