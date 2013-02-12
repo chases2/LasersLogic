@@ -1,35 +1,46 @@
 /*
-Lasers and Logic - Motion Tracker Turret, Simple Design
-1/27/13
-The Simple Motion Tracker Turret...
+STracker.ino
+Amelia Peterson
+2/12/13
+
+Motion Tracker Turret, Simple Design
+	This code controls a turret which tracks and shoots at any motion in the
+	environment. The turret has one motor which is controlled by pins 0,1, and 11 (PWM)
+	connected to an H-bridge, 3 ultrasonic rangers for collecting environment data,
+	a rotary 10k pot with +5V across it and input to the A0 pin for positioning data,
+	and an IR transmitter and receiver for dealing and receiving damage.
+
+	The turret only takes normal damage (codes beggining with 0xA0). After the turret's
+	health has been depleted, there is a minute delay, then it restarts with full health.
 */
-#include VirtualWire.h
+#include IRremote.h
 
-//PINS//
-int Motor_A = 0;  		//Connected to pin 3A on the H-bridge
-int Motor_B = 1;			//Connected to pin 4A on the H-bridge
-int Motor_EN = 11;		//Connected to M_EN (motor enable) on the H-bridge
+//Motor Control//
+const int Motor_A = 0;  			//Connected to pin 3A on the H-bridge
+const int Motor_B = 1;				//Connected to pin 4A on the H-bridge
+const int Motor_EN = 11;			//Connected to M_EN (motor enable) on the H-bridge
 
-int Ranger1 = 3;			//Connected to Ranger 1 Data Line
-int Ranger2 = 4;			//Connected to Ranger 2 Data Line
-int Ranger3 = 5;			//Connected to Ranger 3 Data Line
+//Range finder data lines//
+const int Ranger1 = 3;				//Connected to Ranger 1 Data Line
+const int Ranger2 = 4;				//Connected to Ranger 2 Data Line
+const int Ranger3 = 5;				//Connected to Ranger 3 Data Line
 
-int Hit = 2;				//Connected to HIT line on IR receiver - will vector
-					// to ISR after changing from LOW->HIGH logic
-//TX, D7 line connected to IR LED
-//RX, D6 line connected to IR Receiver pin 3
+//IR Control//
+const int IR_input = 3;  			//Must be a PWM pin - IR Receiver Data Output
+const int IR_output = 2;			//Anode of IR LED
 
-int POT = A0;			//Connected to position potentiometer
+//Positioning information//
+int POT = A0;					//Connected to position potentiometer
 
 //VARIABLES//
-float position;			//The position of the mount is determined by the
-					// input from a potentiometer which rotates with
-					// the mount.
-int Health = 10;
+float position;					//The position of the mount is determined by the
+						// input from a potentiometer which rotates with
+						// the mount.
+signed char Health = 50;
+bool Team = 0;
 
 void setup(){
-	Serial.begin(9600);
-	
+	//Motor Setup//	
 	pinMode(Motor_A, OUTPUT);
 	digitalWrite(Motor_A, HIGH);
 	pinMode(Motor_B, OUTPUT);
@@ -37,25 +48,9 @@ void setup(){
 	pinMode(Motor_EN, OUTPUT);
 	digitalWrite(Motor_EN, LOW);
 	
-	//Configure external interrupt
-	pinMode(2, INPUT);			//D2 will trigger the interrupt
-	//enable pin change interrupt 2: 
-	//Change on any enabled PCINT[23:16] will cause interrupt
-	//PCICR = Pin change interrupt control register
-	PCICR |= (1 << PCIE2);      
-     
-	//enable Interrupt on specific pin
-	//PCMSK2 = Pin change Mask register
-	PCMSK2 |= (1 << PCINT18); 	//enable PinChangeInterrupt on PCINT18
-	//PCINT18 = pin nr.2 = PD2 = D2
-
-	pinMode(7, INPUT);
-	pinMode(6, INPUT);
-	// Bits per sec
-	vw_setup(2000);
-	// pin 2 is used as the transmit data out into the TX
-	// Link module, change this to suit your needs.
-	vw_set_tx_pin(7);
+	//IR Setup//
+	pinMode(IR_input, OUTPUT);  	//set pin 3 to IR input
+  	irrecv.enableIRIn();          	//Begin the receiving process. This will enable the timer interrupt which consumes a small amount of CPU every 50 Âµs.
 }
 
 ISR(PCINT2_vect){  //InterruptService-Routine, called by the Interruptvektor PCINT_vect
@@ -128,12 +123,10 @@ void get_position(){
 }
 
 void fire(){
-	byte msg[2];
-	msg[0] = '50';
-	msg[1] = '50';
-	vw_send(msg, 2);
-	// Wait for message to finish
-	vw_wait_tx();
+	long shot = 0xA005;
+	shot = shot+(Team<<11);
+	shot = shot+Stats[1];
+	irsend.sendSony(shot,16);
 }
 
 void track(){
@@ -162,8 +155,32 @@ void track(){
 	digitalWrite(Motor_B, 0);
 }
 
+void get_damage(){
+	if(irrecv.decode(&decodedSignal)==true){
+    		if(decodedSignal.rawlen==16){
+      			char data[3];
+      			parse(decodedSignal.value, data);
+      			if(data[0]=(0xA0+Team<<11)){			//If not normal damage...
+        			health = health - (data[2]<<1);
+      			}
+    		}    
+ 	}
+	if(health<1){
+		delay(60000);		//Disable for a minute
+		health = 50;		//Revive
+	}
+}
+
+void parse(long unsigned int signal, char* data){
+  //parse into header, carrier, damage
+  data[0] = signal>>12;    //Header
+  data[1] = signal>>8;     //Team, Carrier
+  data[2] = signal;        //Level
+}
+
 void loop(){
 	get_position();
 	move();
 	track();
+	get_damage();
 }
