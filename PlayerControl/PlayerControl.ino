@@ -13,7 +13,7 @@ Notes:
 */
 #include <VirtualWire.h>
 #include <IRremote.h>
-typedef void (*funcptr)(char carrier, char value);
+typedef void (*funcptr)(byte carrier, byte value);
 
 //RF Device Variables//
 const int RF_input = 9;  		//Must be a PWM pin - RF Receiver Digital Output
@@ -25,7 +25,7 @@ IRrecv irrecv(RF_input); 	     	//Create an IRrecv object
 const int IR_input = 3;  		//Must be a PWM pin - IR Receiver Data Output
 const int IR_output = 2;		//Anode of IR LED
 const int IR_trigger = 1;		//Normally GND, Power to trigger
-decode_results decodedSignal ; 	     	//Stores results from IR detector
+decode_results decodedSignal; 	     	//Stores results from IR detector
 IRsend irsend;
 //Control Variables//
 char Stats[2] = {100, 5};  		//Health, Attack
@@ -60,14 +60,14 @@ void IR_fire(){
 void RF_fire(){
   int index = analogRead(item);      //Grab item number from analog input pin
   index = index%3;                   //Calculate item index based on raw analog value          
-  vw_send((uint8_t *)items[index], 4);//Send AoE, vw_send(data,#bytes)
+  vw_send((uint8_t *)items[index], 2);//Send AoE, vw_send(data,#bytes)
   vw_wait_tx();                      // Wait until the whole message is gone
 }
 
 void Get_Damage(){
   if(irrecv.decode(&decodedSignal)==true){      //If IR signal has been received...
     if(decodedSignal.rawlen==16){               //If IR signal is not 16 bits...
-      char data[4];                             //data = {Header, Carrier, first Value byte, second Value byte}
+      byte data[4];                             //data = {Header, Carrier, first Value byte, second Value byte}
       parse(decodedSignal.value, data);         //Parse code into Header, Carrier, first and second Value bytes
       if(data[0]!=0xA && Team!=(data[1]>>7)){   //If Header is not equal to 0xA and code was not sent from Team member...
         carriers[data[1]](data[1],data[2]);     //Call function corresponding to carrier
@@ -79,7 +79,7 @@ void Get_Damage(){
     uint8_t buflen = VW_MAX_MESSAGE_LEN;        //Initialize variable to store code length
      if (vw_get_message(buf, &buflen)){         //If the data is not corrupted
       if(buflen!=16){                           //If the message length is not equal to 16
-        char data[3];                           //data = {Header, Carrier, first Value byte, second Value byte}
+        byte data[4];                           //data = {Header, Carrier, first Value byte, second Value byte}
         parse(*buf,data);                       //Parse code into Header, Carrier, first and second Value bytes
 	if(data[0]!=0xA && Team!=(data[1]>>7)){ //If Header is not equal to 0xA and code was not sent from Team member...
           carriers[data[1]](data[1],data[2]);   //Call function corresponding to carrier
@@ -89,39 +89,39 @@ void Get_Damage(){
   }
 }
 
-void parse(long unsigned int signal, char* data){
+void parse(long unsigned int signal, byte* data){
   //parse into header, carrier, damage
-  data[0] = signal>>12;    //Header
-  data[1] = signal>>8;     //Team, Carrier
-  data[2] = signal;        //Level/Value
+  data[0] = (signal>>12);     	    //Header
+  data[1] = (signal>>8)&(0x0F);     //Team, Carrier
+  data[2] = signal;        	    //Level/Value
 }
-void Normal(char carrier, char value){
-  signed char sign = 2*(value>>7);	//0 or 2 -> sign of value will be (-1+sign) = -1 or 1
-  signed char val = value<<1;           //Grab value of code (0-127)
+void Normal(byte carrier, byte value){
+  signed byte sign = 2*(value>>7);	//0 or 2 -> sign of value will be (-1+sign) = -1 or 1
+  signed byte val = value<<1;           //Grab value of code (0-127)
   Stats[0] = Stats[0] + (-1+sign)*val;  //Health = Health + (-1+sign)(Value) - Add or Subtract Health
 }
-void Timed(char carrier, char value){
+void Timed(byte carrier, byte value){
 
 }
-void Buf(char carrier, char value){
-  signed char sign = 2*(value>>7);      //0 or 2 -> sign of value will be (-1+sign) = -1 or 1
-  signed char stat = value>>6;          //Grab Stat to be added to or subtracted from
-  signed char val = value<<2;           //Grab value of code (0-63)
+void Buf(byte carrier, byte value){
+  signed byte sign = 2*(value>>7);      //0 or 2 -> sign of value will be (-1+sign) = -1 or 1
+  signed byte stat = value>>6;          //Grab Stat to be added to or subtracted from
+  signed byte val = value<<2;           //Grab value of code (0-63)
   Stats[stat] = Stats[stat] + (-1+sign)*(val);//Stat = Stat + (-1+sign)(Value) - Add or Subtract from Stat
 }
-void Clear(char carrier, char value){
+void Clear(byte carrier, byte value){
 
 }
-void Massive(char carrier, char value){
+void Massive(byte carrier, byte value){
 
 }
-void Special(char carrier, char value){
+void Special(byte carrier, byte value){
 
 }
-void Element(char carrier, char value){
+void Element(byte carrier, byte value){
   
 }
-void LD(char carrier, char value){
+void LD(byte carrier, byte value){
 
 }
 void StatusConditions(){
