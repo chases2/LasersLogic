@@ -1,7 +1,7 @@
 /*
 PlayerControl.ino
 Amelia Peterson
-2/15/13
+2/16/13
 
 This code manages the I/O for the player's arduino (IR and RF transmitters and receivers, triggers, item selection),
 damage, status conditions, and items.
@@ -14,6 +14,12 @@ Notes:
 #include <VirtualWire.h>
 #include <IRremote.h>
 typedef void (*funcptr)(byte carrier, byte value);
+
+struct Status{
+	byte Carrier;
+	unsigned long duration;
+	unsigned long time_in;
+}
 
 //RF Device Variables//
 const int RF_input = 9;  		//Must be a PWM pin - RF Receiver Digital Output
@@ -29,7 +35,9 @@ decode_results decodedSignal; 	     	//Stores results from IR detector
 IRsend irsend;
 //Control Variables//
 char Stats[2] = {100, 5};  		//Health, Attack
-long items[3] = {0xA60A, 0xA00A, 0xA81E};//Magic Missile, Mass Heal, 30 MASSIVE
+int items[3] = {0xA60A, 0xA00A, 0xA81E};//Magic Missile, Mass Heal, 30 MASSIVE
+Status current[3];
+
 funcptr carriers[8] = {Normal, Timed, Buf, Clear, Massive, Special, Element, LD};//Function pointers for each carrier code 0x0-0x7
 bool statcon = 0;                       //True if Player has any status conditions
 bool Team = 0;     			//0 or 1
@@ -47,12 +55,14 @@ void setup(){
   //IR Setup//
   pinMode(IR_input, OUTPUT);    //set pin 3 to IR input
   irrecv.enableIRIn();          //Begin the receiving process. This will enable the timer interrupt which consumes a small amount of CPU every 50 Âµs.
-  pinMode(IR_trigger, OUTPUT);  
+  pinMode(IR_trigger, OUTPUT);
+  //Initilize Variables
+  Status temp = {0, 0, 0};  
 }
 
 void IR_fire(){
-  long shot = 0xA000;          //Has Header A, carrier code 0x0  
-  shot = shot+(Team<<11);      //include Team # in shot code
+  int shot = 0xA000;          //Has Header A, carrier code 0x0  
+  shot = shot+(Team<<11);      //inclux`de Team # in shot code
   shot = shot+Stats[1];        //add Attack stat
   irsend.sendSony(shot,16);    //Send attack, sendSony(data,#bits)
 }
@@ -67,8 +77,8 @@ void RF_fire(){
 void Get_Damage(){
   if(irrecv.decode(&decodedSignal)==true){      //If IR signal has been received...
     if(decodedSignal.rawlen==16){               //If IR signal is not 16 bits...
-      byte data[4];                             //data = {Header, Carrier, first Value byte, second Value byte}
-      parse(decodedSignal.value, data);         //Parse code into Header, Carrier, first and second Value bytes
+      byte data[3];                             //data = {Header, Carrier, Value byte}
+      parse(decodedSignal.value, data);         //Parse code into Header, Team/Carrier, Value byte
       if(data[0]!=0xA && Team!=(data[1]>>7)){   //If Header is not equal to 0xA and code was not sent from Team member...
         carriers[data[1]](data[1],data[2]);     //Call function corresponding to carrier
       }
@@ -79,8 +89,8 @@ void Get_Damage(){
     uint8_t buflen = VW_MAX_MESSAGE_LEN;        //Initialize variable to store code length
      if (vw_get_message(buf, &buflen)){         //If the data is not corrupted
       if(buflen!=16){                           //If the message length is not equal to 16
-        byte data[4];                           //data = {Header, Carrier, first Value byte, second Value byte}
-        parse(*buf,data);                       //Parse code into Header, Carrier, first and second Value bytes
+        byte data[3];                           //data = {Header, Team/Carrier, Value byte}
+        parse(*buf,data);                       //Parse code into Header, Carrier, Value byte
 	if(data[0]!=0xA && Team!=(data[1]>>7)){ //If Header is not equal to 0xA and code was not sent from Team member...
           carriers[data[1]](data[1],data[2]);   //Call function corresponding to carrier
 	}
@@ -104,9 +114,9 @@ void Timed(byte carrier, byte value){
 
 }
 void Buf(byte carrier, byte value){
-  signed byte sign = 2*(value>>7);      //0 or 2 -> sign of value will be (-1+sign) = -1 or 1
-  signed byte stat = value>>6;          //Grab Stat to be added to or subtracted from
-  signed byte val = value<<2;           //Grab value of code (0-63)
+  byte sign = 2*(value>>7);      //0 or 2 -> sign of value will be (-1+sign) = -1 or 1
+  byte stat = value>>6;          //Grab Stat to be added to or subtracted from
+  byte val = value<<2;           //Grab value of code (0-63)
   Stats[stat] = Stats[stat] + (-1+sign)*(val);//Stat = Stat + (-1+sign)(Value) - Add or Subtract from Stat
 }
 void Clear(byte carrier, byte value){
