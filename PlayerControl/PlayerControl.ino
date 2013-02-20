@@ -1,7 +1,7 @@
 /*
 PlayerControl.ino
 Amelia Peterson
-2/16/13
+2/19/13
 
 This code manages the I/O for the player's arduino (IR and RF transmitters and receivers, triggers, item selection),
 damage, status conditions, and items.
@@ -111,7 +111,21 @@ void Normal(byte carrier, byte value){
   Stats[0] = Stats[0] + (-1+sign)*val;  //Health = Health + (-1+sign)(Value) - Add or Subtract Health
 }
 void Timed(byte carrier, byte value){
-
+  Status stat;
+  stat.time_in = micros();
+  stat.duration = (value&0x7F);
+  stat.Carrier = (values&0x80);
+  pushStat(stat);
+}
+void pushStat(Status stat){
+  for(char i=0;i<3;i++){
+    if(current[i].time_in==0){
+      current[i] = stat;
+    }
+  }
+}
+void popStatus(char index){
+  
 }
 void Buf(byte carrier, byte value){
   byte sign = 2*(value>>7);      //0 or 2 -> sign of value will be (-1+sign) = -1 or 1
@@ -135,7 +149,15 @@ void LD(byte carrier, byte value){
 
 }
 void StatusConditions(){
-
+  for(char i=0; i<3; i++){
+    if(current[i].time_in==0){
+      break;
+    }
+    if(current[i].duration<(micros()-current[i].time_in)){
+      popStatus(i);
+      break;
+    }
+  }
 }
 void loop(){
   //Currently, the RF and IR Trigger pins are continuously
