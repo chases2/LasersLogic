@@ -1,7 +1,7 @@
 /*
 PlayerControl.ino
 Amelia Peterson
-2/19/13
+2/21/13
 
 This code manages the I/O for the player's arduino (IR and RF transmitters and receivers, triggers, item selection),
 damage, status conditions, and items.
@@ -33,6 +33,11 @@ const int IR_output = 2;		//Anode of IR LED
 const int IR_trigger = 1;		//Normally GND, Power to trigger
 decode_results decodedSignal; 	     	//Stores results from IR detector
 IRsend irsend;
+//Lights and Sound
+const int RED = D4;			//Red LED for Damage
+const int GRN = D5;			//Green LED for Heal
+const int BLU = D6;			//Blue LED for Status condition
+const int Buzzer = D11;			//Buzzer for sounds
 //Control Variables//
 char Stats[2] = {100, 5};  		//Health, Attack
 int items[3] = {0xA60A, 0xA00A, 0xA81E};//Magic Missile, Mass Heal, 30 MASSIVE
@@ -57,14 +62,21 @@ void setup(){
   irrecv.enableIRIn();          //Begin the receiving process. This will enable the timer interrupt which consumes a small amount of CPU every 50 Âµs.
   pinMode(IR_trigger, OUTPUT);
   //Initilize Variables
-  Status temp = {0, 0, 0};  
+  Status temp = {0, 0, 0};
+  //LEDs and Buzzer  
+  pinMode(RED, OUTPUT);
+  pinMode(GRN, OUTPUT);
+  pinMode(BLU, OUTPUT);
+  pinMode(Buzzer, OUTPUT);
 }
 
 void IR_fire(){
+  digitalWrite(RED, 1);
   int shot = 0xA000;          //Has Header A, carrier code 0x0  
   shot = shot+(Team<<11);      //inclux`de Team # in shot code
   shot = shot+Stats[1];        //add Attack stat
   irsend.sendSony(shot,16);    //Send attack, sendSony(data,#bits)
+  digitalWrite(RED, 0);
 }
 
 void RF_fire(){
@@ -106,16 +118,33 @@ void parse(long unsigned int signal, byte* data){
   data[2] = signal;        	    //Level/Value
 }
 void Normal(byte carrier, byte value){
-  signed byte sign = 2*(value>>7);	//0 or 2 -> sign of value will be (-1+sign) = -1 or 1
+  digitalWrite(RED, 1);
+  bool bit_sign = value>>7;
+  if(bit_sign){
+    digitalWrite(RED, 1);
+  }
+  else{
+    digitalWrite(GRN, 1);
+  }
+  signed byte sign = 2*(bit_sign);	//0 or 2 -> sign of value will be (-1+sign) = -1 or 1
   signed byte val = value<<1;           //Grab value of code (0-127)
   Stats[0] = Stats[0] + (-1+sign)*val;  //Health = Health + (-1+sign)(Value) - Add or Subtract Health
+  digitalWrite(RED, 0);
+  if(bit_sign){
+    digitalWrite(RED, 0);
+  }
+  else{
+    digitalWrite(GRN, 0);
+  }
 }
 void Timed(byte carrier, byte value){
+  digitalWrite(BLU, 1);
   Status stat;
   stat.time_in = micros();
   stat.duration = (value&0x7F);
   stat.Carrier = (values&0x80);
   pushStat(stat);
+  digitalWrite(BLU, 0);
 }
 void pushStat(Status stat){
   for(char i=0;i<3;i++){
@@ -128,16 +157,20 @@ void popStatus(char index){
   
 }
 void Buf(byte carrier, byte value){
+  digitalWrite(BLU, 1);
   byte sign = 2*(value>>7);      //0 or 2 -> sign of value will be (-1+sign) = -1 or 1
   byte stat = value>>6;          //Grab Stat to be added to or subtracted from
   byte val = value<<2;           //Grab value of code (0-63)
   Stats[stat] = Stats[stat] + (-1+sign)*(val);//Stat = Stat + (-1+sign)(Value) - Add or Subtract from Stat
+  digitalWrite(BLU, 0);
 }
 void Clear(byte carrier, byte value){
-
+  digitalWrite(GRN, 1);
+  digitalWrite(GRN, 1);
 }
 void Massive(byte carrier, byte value){
-
+  digitalWrite(RED, 1);
+  digitalWrite(RED, 0);
 }
 void Special(byte carrier, byte value){
 
