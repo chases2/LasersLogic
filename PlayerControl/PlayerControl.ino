@@ -15,8 +15,9 @@ Notes:
 #include <IRremote.h>
 typedef void (*funcptr)(byte carrier, byte value);
 
-struct Status{
+struct Status{				//Status hold timed status conditions
 	byte Carrier;
+        byte Value;
 	unsigned long duration;
 	unsigned long time_in;
 }
@@ -28,8 +29,8 @@ const int RF_trigger = 7;		//Normally GND, Power to trigger
 const int item = A0;			//Analog input for item selection (currently selects one of three items)
 IRrecv irrecv(RF_input); 	     	//Create an IRrecv object
 //IR Device Variables//
-const int IR_input = 3;  		//Must be a PWM pin - IR Receiver Data Output
-const int IR_output = 2;		//Anode of IR LED
+const int IR_input = 2;  		//Must be a PWM pin - IR Receiver Data Output
+const int IR_output = 3;		//Anode of IR LED
 const int IR_trigger = 1;		//Normally GND, Power to trigger
 decode_results decodedSignal; 	     	//Stores results from IR detector
 IRsend irsend;
@@ -73,7 +74,7 @@ void setup(){
 void IR_fire(){
   digitalWrite(RED, 1);
   int shot = 0xA000;          //Has Header A, carrier code 0x0  
-  shot = shot+(Team<<11);      //inclux`de Team # in shot code
+  shot = shot+(Team<<11);      //include Team # in shot code
   shot = shot+Stats[1];        //add Attack stat
   irsend.sendSony(shot,16);    //Send attack, sendSony(data,#bits)
   digitalWrite(RED, 0);
@@ -146,34 +147,46 @@ void Timed(byte carrier, byte value){
   pushStat(stat);
   digitalWrite(BLU, 0);
 }
+void Timed_Effect(byte Carrier, byte Value){
+
+}
 void pushStat(Status stat){
   for(char i=0;i<3;i++){
     if(current[i].time_in==0){
       current[i] = stat;
+      break;
     }
   }
 }
 void popStatus(char index){
-  
+  Status temp;
+  temp.time_in = 0x00;
+  current[index] = temp; 
 }
 void Buf(byte carrier, byte value){
   digitalWrite(BLU, 1);
   byte sign = 2*(value>>7);      //0 or 2 -> sign of value will be (-1+sign) = -1 or 1
   byte stat = value>>6;          //Grab Stat to be added to or subtracted from
   byte val = value<<2;           //Grab value of code (0-63)
-  Stats[stat] = Stats[stat] + (-1+sign)*(val);//Stat = Stat + (-1+sign)(Value) - Add or Subtract from Stat
+  Stats[stat] = Stats[stat] + (-1+sign)*(val); //Stat = Stat + (-1+sign)(Value) - Add or Subtract from Stat
   digitalWrite(BLU, 0);
 }
 void Clear(byte carrier, byte value){
   digitalWrite(GRN, 1);
-  digitalWrite(GRN, 1);
+  Status temp;			//Create empty Status
+  temp.time_in = 0;
+  for(int i = 0; i<3; i++){
+    current[i] = temp;		//Clear all status conditions
+  }
+  digitalWrite(GRN, 0);
 }
 void Massive(byte carrier, byte value){
   digitalWrite(RED, 1);
+  Stats[0] = Stats[0] - value;	//Health = Health - Value
   digitalWrite(RED, 0);
 }
 void Special(byte carrier, byte value){
-
+  
 }
 void Element(byte carrier, byte value){
   
@@ -182,17 +195,22 @@ void LD(byte carrier, byte value){
 
 }
 void StatusConditions(){
-  for(char i=0; i<3; i++){
-    if(current[i].time_in==0){
-      break;
+  char empty_status = 0;
+  for(char i=0; i<3; i++){			//Go through all status conditions and accumulate results
+    if(current[i].time_in==0){			//If time_in==0, no status stored
+      empty_status++;
+      continue;
     }
-    if(current[i].duration<(micros()-current[i].time_in)){
+    Timed_Effect(current[i].Carrier, current[i].Value);	//Accumulate Effects
+    if(current[i].duration<(micros()-current[i].time_in)){//if status has been in for specified duration, remove it
       popStatus(i);
       break;
     }
   }
+  statcon = 0;
 }
 void loop(){
+  unsigned long Status_timer = 0;
   //Currently, the RF and IR Trigger pins are continuously
   //polled, but later on they will be implemented with 
   //interrupts.
@@ -205,7 +223,9 @@ void loop(){
   
   Get_Damage();              //Detect if IR or RF signal was received
   
-  if(statcon){              //Accumulate damage from Status Conditions
+  Status_timer++;
+  if(statcon && Status_timer==0x0001000){              //Accumulate damage from Status Conditions
     StatusConditions();
+    Status_timer=0;
   }
 }
