@@ -1,7 +1,7 @@
 /*
 PlayerControl.ino
 Amelia Peterson
-2/21/13
+3/13/13
 
 This code manages the I/O for the player's arduino (IR and RF transmitters and receivers, triggers, item selection),
 damage, status conditions, and items.
