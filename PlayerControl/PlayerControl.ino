@@ -11,17 +11,20 @@ Notes:
 (make sure you change the pins after you change the timer). I have VirtualWire using Timer 1 and IRremote using Timer 2.
 
 */
+/*
+Team
+Attack
+Health
+Defense
+Items
+Number items
+Number Statuses
+*/
 #include <VirtualWire.h>
 #include <IRremote.h>
+#include "Status.h"
 
 typedef void (*funcptr)(byte carrier, byte value);
-
-struct Status{				//Status hold timed status conditions
-	byte Carrier;
-        byte Value;
-	unsigned long duration;
-	unsigned long time_in;
-};
 
 //RF Device Variables//
 const int RF_input = 8;  		//Must be a PWM pin - RF Receiver Digital Output
@@ -40,11 +43,11 @@ const int RED = 4;			//Red LED for Damage
 const int GRN = 5;			//Green LED for Heal
 const int BLU = 6;			//Blue LED for Status condition
 //Control Variables//
-char Stats[2] = {100, 5};  		//Health, Attack
-int items[3] = {0xA50A, 0xA08A, 0xA41E};//Magic Missile, Mass Heal, 30 MASSIVE
-Status current[3];
+unsigned char Stats[2] = {100, 5};  		//Health, Attack
+int items[3] = {0xA50A, 0xA08A, 0xA11B};//Magic Missile, Mass Heal, 30 MASSIVE
+unsigned char Status_timer = 0;
 
-funcptr carriers[8] = {Normal, Timed, Buf, Clear, Massive, Special, Element, LD};//Function pointers for each carrier code 0x0-0x7
+funcptr carriers[8] = {Normal, Timed, Buf, Clear, Massive, Special, Element, Disable};//Function pointers for each carrier code 0x0-0x7
 bool statcon = 0;                       //True if Player has any status conditions
 bool Team = 0;     			//0 or 1
 
@@ -70,25 +73,14 @@ void setup(){
   vw_set_tx_pin(RF_output); 
   vw_set_rx_pin(RF_input);
   vw_rx_start();               // Start the receiver PLL running
-  //pinMode(RF_trigger, INPUT);
   //IR Setup//
   irrecv.enableIRIn();          //Begin the receiving process. This will enable the timer interrupt which consumes a small amount of CPU every 50 Âµs.
   //Initilize Variables
-  Status temp = {0, 0, 0};
+  Status temp = {0, 0, 0xFF};
   for(int i=0; i<3; i++){
 	current[i] = temp;
   }
   Serial.println("Setup complete");
-}
-void disable_Timer1(){
-     byte oldTCCR1A = TCCR1A;
-     byte oldTCCR1B = TCCR1B;
-     TCCR1A = 0;
-     TCCR1B = 0;
-}
-void enable_Timer1(){
-     //TCCR1A = oldTCCR1A;
-     //TCCR1B = oldTCCR1B;
 }
 void IR_fire(){
   digitalWrite(RED, 1);
@@ -104,11 +96,11 @@ void IR_fire(){
   TCCR1A = oldTCCR1A;
   TCCR1B = oldTCCR1B;
   digitalWrite(RED, 0);
-  while(digitalRead(IR_trigger)==LOW);
+  while(digitalRead(IR_trigger)==HIGH);
 }
 void RF_fire(){
   digitalWrite(BLU,1);
-  int index = analogRead(item);      //Grab item number from analog input pin
+  int index = (analogRead(item)/341)%3;      //Grab item number from analog input pin
   index = index%3;                   //Calculate item index based on raw analog value
   int shot = items[index];
   vw_send((uint8_t *)(&shot), 2);//Send AoE, vw_send(data,#bytes)
@@ -119,35 +111,35 @@ void RF_fire(){
 
 void Get_Damage(){
   if(irrecv.decode(&decodedSignal)==true){      //If IR signal has been received...
-    Serial.println("Received IR signal...");
+    Serial.print("Received IR signal: ");
     Serial.println(decodedSignal.value, HEX);
     Serial.println(decodedSignal.rawlen);
     if(decodedSignal.rawlen==34){               //If IR signal is not 16 bits...
-      Serial.println("Signal had length 34 bits...");
       byte data[3];                             //data = {Header, Carrier, Value byte}
       parse(decodedSignal.value, data);         //Parse code into Header, Team/Carrier, Value byte
-      if(data[0]==0xA && Team!=(data[1]>>7) && data[1]<7){   //If Header is equal to 0xA and code was not sent from Team member...
-        Serial.println("Header correct and code not sent from Team member...");
+      if(data[0]==0xA && Team!=(data[1]>>7)){   //If Header is equal to 0xA and code was not sent from Team member...
         carriers[data[1]](data[1],data[2]);     //Call function corresponding to carrier
       }
     }
     irrecv.resume(); // Receive the next value    
   }
   if (vw_have_message()){                       //If RF signal has been received...
+    Serial.print("Received RF signal: ");
     uint8_t buf[VW_MAX_MESSAGE_LEN];            //Initialize buffer for message
     uint8_t buflen = VW_MAX_MESSAGE_LEN;        //Initialize variable to store code length
     if (vw_get_message(buf, &buflen)){         //If the data is not corrupted
       int code = 0x0000;
       for (int i = buflen-1; i > -1; i--){
         code = code+buf[i]<<(i*8);
-	Serial.println(code,HEX);
+	Serial.print(code,HEX);
       }
+      Serial.println();
       if(buflen!=16){                           //If the message length is not equal to 16
        byte data[3];                           //data = {Header, Team/Carrier, Value byte}
        parse(code,data);                       //Parse code into Header, Carrier, Value byte
-       if(data[0]==0xA && Team!=(data[1]>>7) && data[1]<7){ //If Header is equal to 0xA, code was not sent from Team member, and carrier value exists...
+       if(data[0]==0xA && Team!=(data[1]) && data[1]<7){ //If Header is equal to 0xA, code was not sent from Team member, and carrier value exists...
          Serial.println("Header correct and code not sent from Team member...");
-         carriers[data[1]](data[1],data[2]);   //Call function corresponding to carrier
+         carriers[data[1]&0x7](data[1],data[2]);   //Call function corresponding to carrier
 	}
       }
     }
@@ -174,9 +166,10 @@ void Normal(byte carrier, byte value){
     digitalWrite(GRN, 1);
   }
   byte sign = 2*(bit_sign);	//0 or 2 -> sign of value will be (-1+sign) = -1 or 1
-  byte val = value<<1;           //Grab value of code (0-127)
-  Stats[0] = Stats[0] + (-1+sign)*val;  //Health = Health + (-1+sign)(Value) - Add or Subtract Health
-  //digitalWrite(RED, 0);
+  value = value&0x7F;           //Grab value of code (0-127)
+  Stats[0] = Stats[0] + (-1+sign)*value;  //Health = Health + (-1+sign)(Value) - Add or Subtract Health
+  Serial.print("Health: ");
+  Serial.println(Stats[0], DEC);
   if(!bit_sign){
     digitalWrite(RED, 0);
   }
@@ -184,25 +177,18 @@ void Normal(byte carrier, byte value){
     digitalWrite(GRN, 0);
   }
 }
-/*
-void pushStat(Status stat){
-  for(char i=0;i<3;i++){
-    if(current[i].time_in==0){
-      current[i] = stat;
-    }
-  }
-}
 void popStatus(char index){
-  
+  Status temp = {0,0,0xFF};
+  current[index] = temp;
 }
-*/
 void Timed(byte carrier, byte value){
   digitalWrite(BLU, 1);
   Status stat;
-  stat.time_in = micros();
-  stat.duration = (value&0x7F);
-  stat.Carrier = (value&0x80);
-  //pushStat(stat);
+  stat.Value = (value&0x07);
+  stat.num_updates = pow(2,(value&0x07));
+  stat.Carrier = (value&0xE0);
+  pushStat(stat);
+  statcon = 1;
   digitalWrite(BLU, 0);
 }
 void Buf(byte carrier, byte value){
@@ -216,13 +202,14 @@ void Buf(byte carrier, byte value){
 void Clear(byte carrier, byte value){
   digitalWrite(GRN, 1);
   Status temp;			//Create empty Status
-  temp.time_in = 0;
+  temp.num_updates = 0xFF;
   for(int i = 0; i<3; i++){
     current[i] = temp;		//Clear all status conditions
   }
   digitalWrite(GRN, 0);
 }
 void Massive(byte carrier, byte value){
+  
   digitalWrite(RED, 1);
   Stats[0] = Stats[0] - value;	//Health = Health - Value
   digitalWrite(RED, 0);
@@ -236,45 +223,47 @@ void Special(byte carrier, byte value){
 void Element(byte carrier, byte value){
   
 }
-void LD(byte carrier, byte value){
+void Disable(byte carrier, byte value){
 
-}
-void popStatus(char index){
-  Status temp;
-  temp.time_in = 0x00;
-  current[index] = temp; 
 }
 void StatusConditions(){
   char empty_status = 0;
   for(char i=0; i<3; i++){			//Go through all status conditions and accumulate results
-    if(current[i].time_in==0){			//If time_in==0, no status stored
+    if(current[i].num_updates==0xFF){
       empty_status++;
       continue;
     }
-    Timed(current[i].Carrier, current[i].Value);	//Accumulate Effects
-    if(current[i].duration<(micros()-current[i].time_in)){//if status has been in for specified duration, remove it
+    if(current[i].num_updates==0){			//If time_in==0, no status stored
       popStatus(i);
-      break;
+      empty_status++;
+      continue;
     }
+    Serial.print(current[i].Carrier);
+    Serial.println(current[i].Value);
+    carriers[(current[i].Carrier)](current[i].Carrier, current[i].Value);	//Accumulate Effects
+    current[i].num_updates = current[i].num_updates-1;
   }
-  statcon = 0;
+  if(empty_status==3){
+    statcon = 0;
+  }
 }
 void loop(){
-
-  unsigned long Status_timer = 0;
   //Currently, the RF and IR Trigger pins are continuously
   //polled, but later on they will be implemented with 
   //interrupts.
+  Serial.println("polling");
   if(digitalRead(RF_trigger)==HIGH){      //If RF trigger pulled...
+    Serial.println("RF fire");
     RF_fire();
   }
-  if(digitalRead(IR_trigger)==LOW){      //If IR trigger pulled...
+  if(digitalRead(IR_trigger)==HIGH){      //If IR trigger pulled...
+    Serial.println("IR fire");
     IR_fire();
   }
   Get_Damage();              //Detect if IR or RF signal was received
   
   Status_timer++;
-  if(statcon && Status_timer==0x0001000){              //Accumulate damage from Status Conditions
+  if(statcon && Status_timer==0x00001000){              //Accumulate damage from Status Conditions
     StatusConditions();
     Status_timer=0;
   }
