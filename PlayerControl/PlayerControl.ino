@@ -44,7 +44,7 @@ const int GRN = 5;			//Green LED for Heal
 const int BLU = 6;			//Blue LED for Status condition
 //Control Variables//
 unsigned char Stats[2] = {100, 5};  		//Health, Attack
-int items[3] = {0xA50A, 0xA08A, 0xA11B};//Magic Missile, Mass Heal, 30 MASSIVE
+int items[3] = {0xA50A, 0xA08A, 0xA104};//Magic Missile, Mass Heal, 30 MASSIVE
 unsigned char Status_timer = 0;
 
 funcptr carriers[8] = {Normal, Timed, Buf, Clear, Massive, Special, Element, Disable};//Function pointers for each carrier code 0x0-0x7
@@ -76,8 +76,8 @@ void setup(){
   //IR Setup//
   irrecv.enableIRIn();          //Begin the receiving process. This will enable the timer interrupt which consumes a small amount of CPU every 50 Âµs.
   //Initilize Variables
-  Status temp = {0, 0, 0xFF};
-  for(int i=0; i<3; i++){
+  Status temp = {0, 0, 0, 0xFF, 0};
+  for(int i=0; i<6; i++){
 	current[i] = temp;
   }
   Serial.println("Setup complete");
@@ -178,15 +178,17 @@ void Normal(byte carrier, byte value){
   }
 }
 void popStatus(char index){
-  Status temp = {0,0,0xFF};
+  Status temp = {0,0,0,0xFF,0};
   current[index] = temp;
 }
 void Timed(byte carrier, byte value){
   digitalWrite(BLU, 1);
   Status stat;
-  stat.Value = (value&0x07);
-  stat.num_updates = pow(2,(value&0x07));
-  stat.Carrier = (value&0xE0);
+  stat.index = value>>5;
+  stat.level = (value&0x0F);
+  stat.b_db = (value>>4)&0x01;
+  stat.num_updates = pow(2,stat.level);
+  stat.reset_val = Stats[stat.index];
   pushStat(stat);
   statcon = 1;
   digitalWrite(BLU, 0);
@@ -227,25 +229,28 @@ void Disable(byte carrier, byte value){
 
 }
 void StatusConditions(){
+digitalWrite(BLU, HIGH);
   char empty_status = 0;
-  for(char i=0; i<3; i++){			//Go through all status conditions and accumulate results
-    if(current[i].num_updates==0xFF){
+  for(char i=0; i<6; i++){			//Go through all status conditions and accumulate results
+    if(current[i].num_updates==0xFF){           //If current[i] does not hold a status, increment empty_status counter and continue to next index
       empty_status++;
       continue;
     }
-    if(current[i].num_updates==0){			//If time_in==0, no status stored
-      popStatus(i);
+    if(current[i].num_updates==0){	        //If num_updates==0, Status complete
       empty_status++;
+      if(current[i].index)                      //If not damage status...
+        Stats[current[i].index] = current[i].reset_val;  //reset value
+      popStatus(i);                            //Remove Status
       continue;
     }
-    Serial.print(current[i].Carrier);
-    Serial.println(current[i].Value);
-    carriers[(current[i].Carrier)](current[i].Carrier, current[i].Value);	//Accumulate Effects
+    Stats[current[i].index] = Stats[current[i].index]-current[i].level;	//Accumulate Effects
+    current[i].level = (!(0x1&&current[i].index))*(current[i].level);
     current[i].num_updates = current[i].num_updates-1;
   }
-  if(empty_status==3){
+  if(empty_status==6){
     statcon = 0;
   }
+  digitalWrite(BLU,LOW);
 }
 void loop(){
   //Currently, the RF and IR Trigger pins are continuously
