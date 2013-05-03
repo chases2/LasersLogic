@@ -1,7 +1,7 @@
 /*
 PlayerControl.ino
 Amelia Peterson
-2/21/13
+05/02/13
 
 This code manages the I/O for the player's arduino (IR and RF transmitters and receivers, triggers, item selection),
 damage, status conditions, and items.
@@ -117,7 +117,7 @@ void Get_Damage(){
     if(decodedSignal.rawlen==34){               //If IR signal is not 16 bits...
       byte data[3];                             //data = {Header, Carrier, Value byte}
       parse(decodedSignal.value, data);         //Parse code into Header, Team/Carrier, Value byte
-      if(data[0]==0xA && Team!=(data[1]>>7)){   //If Header is equal to 0xA and code was not sent from Team member...
+      if(data[0]==0xA && data[1]<6){   //If Header is equal to 0xA and carruer value exists...
         carriers[data[1]](data[1],data[2]);     //Call function corresponding to carrier
       }
     }
@@ -137,7 +137,7 @@ void Get_Damage(){
       if(buflen!=16){                           //If the message length is not equal to 16
        byte data[3];                           //data = {Header, Team/Carrier, Value byte}
        parse(code,data);                       //Parse code into Header, Carrier, Value byte
-       if(data[0]==0xA && Team!=(data[1]) && data[1]<7){ //If Header is equal to 0xA, code was not sent from Team member, and carrier value exists...
+       if(data[0]==0xA && data[1]<7){ //If Header is equal to 0xA and carrier value exists...
          Serial.println("Header correct and code not sent from Team member...");
          carriers[data[1]&0x7](data[1],data[2]);   //Call function corresponding to carrier
 	}
@@ -158,23 +158,26 @@ void parse(long unsigned int signal, byte* data){
 }
 void Normal(byte carrier, byte value){
   Serial.println("Normal Damage Received");
+  bool sending_Team = carrier>>7;
   bool bit_sign = value>>7;
-  if(!bit_sign){
-    digitalWrite(RED, 1);
-  }
-  else{
-    digitalWrite(GRN, 1);
-  }
-  byte sign = 2*(bit_sign);	//0 or 2 -> sign of value will be (-1+sign) = -1 or 1
-  value = value&0x7F;           //Grab value of code (0-127)
-  Stats[0] = Stats[0] + (-1+sign)*value;  //Health = Health + (-1+sign)(Value) - Add or Subtract Health
-  Serial.print("Health: ");
-  Serial.println(Stats[0], DEC);
-  if(!bit_sign){
-    digitalWrite(RED, 0);
-  }
-  else{
-    digitalWrite(GRN, 0);
+  if( ((bit_sign)&&(sending_Team==Team)) || ((!bit_sign)&&(sending_Team!=Team)) ){  //If healing and sent by team member, or if damage and not sent by team member
+    if(!bit_sign){
+      digitalWrite(RED, 1);
+    }
+    else{
+      digitalWrite(GRN, 1);
+    }
+    byte sign = 2*(bit_sign);	//0 or 2 -> sign of value will be (-1+sign) = -1 or 1
+    value = value&0x7F;           //Grab value of code (0-127)
+    Stats[0] = Stats[0] + (-1+sign)*value;  //Health = Health + (-1+sign)(Value) - Add or Subtract Health
+    Serial.print("Health: ");
+    Serial.println(Stats[0], DEC);
+    if(!bit_sign){
+      digitalWrite(RED, 0);
+    }
+    else{
+      digitalWrite(GRN, 0);
+    }
   }
 }
 void popStatus(char index){
@@ -182,36 +185,32 @@ void popStatus(char index){
   current[index] = temp;
 }
 void Timed(byte carrier, byte value){
-  digitalWrite(BLU, 1);
   Status stat;
-  stat.index = value>>5;
-  stat.level = (value&0x0F);
+  bool sending_Team = carrier>>7;
   stat.b_db = (value>>4)&0x01;
-  stat.num_updates = pow(2,stat.level);
-  stat.reset_val = Stats[stat.index];
-  pushStat(stat);
-  statcon = 1;
-  digitalWrite(BLU, 0);
+  if( ((stat.b_db)&&(sending_Team==Team)) || ((!stat.b_db)&&(sending_Team!=Team)) ){  //If healing and sent by team member, or if damage and not sent by team member
+    digitalWrite(BLU, 1);
+    stat.index = value>>5;
+    stat.level = (value&0x0F);
+    stat.num_updates = pow(2,stat.level);
+    stat.reset_val = Stats[stat.index];
+    pushStat(stat);
+    statcon = 1;
+    digitalWrite(BLU, 0);
+  }
 }
 void Buf(byte carrier, byte value){
-  digitalWrite(BLU, 1);
-  byte sign = 2*(value>>7);      //0 or 2 -> sign of value will be (-1+sign) = -1 or 1
-  byte stat = value>>6;          //Grab Stat to be added to or subtracted from
-  byte val = value<<2;           //Grab value of code (0-63)
-  Stats[stat] = Stats[stat] + (-1+sign)*(val);//Stat = Stat + (-1+sign)(Value) - Add or Subtract from Stat
-  digitalWrite(BLU, 0);
 }
 void Clear(byte carrier, byte value){
   digitalWrite(GRN, 1);
   Status temp;			//Create empty Status
   temp.num_updates = 0xFF;
-  for(int i = 0; i<3; i++){
-    current[i] = temp;		//Clear all status conditions
+  for(int i = 3; i<6; i++){
+    current[i] = temp;		//Clear all status conditions (only debufs)
   }
   digitalWrite(GRN, 0);
 }
 void Massive(byte carrier, byte value){
-  
   digitalWrite(RED, 1);
   Stats[0] = Stats[0] - value;	//Health = Health - Value
   digitalWrite(RED, 0);
@@ -243,7 +242,7 @@ digitalWrite(BLU, HIGH);
       popStatus(i);                            //Remove Status
       continue;
     }
-    Stats[current[i].index] = Stats[current[i].index]-current[i].level;	//Accumulate Effects
+    Stats[current[i].index] = Stats[current[i].index]-(1-2*(current[i].b_db))*current[i].level;	//Accumulate Effects
     current[i].level = (!(0x1&&current[i].index))*(current[i].level);
     current[i].num_updates = current[i].num_updates-1;
   }
