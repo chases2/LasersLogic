@@ -23,6 +23,7 @@ Number Statuses
 #include <VirtualWire.h>
 #include <IRremote.h>
 #include "Status.h"
+#include <LiquidCrystal.h>
 
 typedef void (*funcptr)(byte carrier, byte value);
 
@@ -38,10 +39,8 @@ const int IR_trigger = 12;		//Normally GND, Power to trigger
 IRrecv irrecv(IR_input); //create an IRrecv object
 decode_results decodedSignal; 	     	//Stores results from IR detector
 IRsend irsend;
-//Lights and Sound
-const int RED = 4;			//Red LED for Damage
-const int GRN = 5;			//Green LED for Heal
-const int BLU = 6;			//Blue LED for Status condition
+//Display
+LiquidCrystal lcd(4,5,6,10,11,13);
 //Control Variables//
 unsigned char Stats[2] = {100, 5};  		//Health, Attack
 int items[3] = {0xA50A, 0xA08A, 0xA104};//Magic Missile, Mass Heal, 30 MASSIVE
@@ -52,42 +51,36 @@ bool statcon = 0;                       //True if Player has any status conditio
 bool Team = 0;     			//0 or 1
 
 void setup(){
-  Serial.begin(9600);
-  //LEDs 
-  pinMode(RED, OUTPUT);
-  pinMode(GRN, OUTPUT);
-  pinMode(BLU, OUTPUT);
-  //Power Up lights
-  digitalWrite(RED, HIGH);
-  delay(200);
-  digitalWrite(GRN, HIGH);
-  delay(200);
-  digitalWrite(BLU, HIGH);
-  delay(200);
-  digitalWrite(RED, LOW);
-  digitalWrite(GRN, LOW);
-  digitalWrite(BLU, LOW);
   //RF Setup//
   vw_set_ptt_inverted(true);    // Required for DR3100
   vw_setup(2500);	        // Bits per sec
   vw_set_tx_pin(RF_output); 
   vw_set_rx_pin(RF_input);
   vw_rx_start();               // Start the receiver PLL running
+  
   //IR Setup//
   irrecv.enableIRIn();          //Begin the receiving process. This will enable the timer interrupt which consumes a small amount of CPU every 50 Âµs.
+  
   //Initilize Variables
   Status temp = {0, 0, 0, 0xFF, 0};
   for(int i=0; i<6; i++){
 	current[i] = temp;
   }
-  Serial.println("Setup complete");
+  
+  //Display Setup
+  lcd.begin(16, 2);
+  
+  lcd.setCursor(0,1);
+  lcd.print(Stats[0]);
+  
+  //Serial.println("Setup complete");
 }
 void IR_fire(){
-  digitalWrite(RED, 1);
+  //digitalWrite(RED, 1);
   int shot = 0xA000;          //Has Header A, carrier code 0x0  
   shot = shot+(Team<<11);      //include Team # in shot code
   shot = shot+Stats[1];        //add Attack stat
-  Serial.println(shot,HEX);
+  //Serial.println(shot,HEX);
   byte oldTCCR1A = TCCR1A;
   byte oldTCCR1B = TCCR1B;
   TCCR1A = 0;
@@ -95,25 +88,25 @@ void IR_fire(){
   irsend.sendSony(shot,16);     //Send attack, sendSony(data,#bits)
   TCCR1A = oldTCCR1A;
   TCCR1B = oldTCCR1B;
-  digitalWrite(RED, 0);
+  //digitalWrite(RED, 0);
   while(digitalRead(IR_trigger)==HIGH);
 }
 void RF_fire(){
-  digitalWrite(BLU,1);
+  //digitalWrite(BLU,1);
   int index = (analogRead(item)/341)%3;      //Grab item number from analog input pin
   index = index%3;                   //Calculate item index based on raw analog value
   int shot = items[index];
   vw_send((uint8_t *)(&shot), 2);//Send AoE, vw_send(data,#bytes)
   vw_wait_tx();                      // Wait until the whole message is gone
   while(digitalRead(RF_trigger)==HIGH);
-  digitalWrite(BLU,0);
+  //digitalWrite(BLU,0);
 }
 
 void Get_Damage(){
   if(irrecv.decode(&decodedSignal)==true){      //If IR signal has been received...
-    Serial.print("Received IR signal: ");
-    Serial.println(decodedSignal.value, HEX);
-    Serial.println(decodedSignal.rawlen);
+    //Serial.print("Received IR signal: ");
+    //Serial.println(decodedSignal.value, HEX);
+    //Serial.println(decodedSignal.rawlen);
     if(decodedSignal.rawlen==34){               //If IR signal is not 16 bits...
       byte data[3];                             //data = {Header, Carrier, Value byte}
       parse(decodedSignal.value, data);         //Parse code into Header, Team/Carrier, Value byte
@@ -131,14 +124,14 @@ void Get_Damage(){
       int code = 0x0000;
       for (int i = buflen-1; i > -1; i--){
         code = code+buf[i]<<(i*8);
-	Serial.print(code,HEX);
+	//Serial.print(code,HEX);
       }
-      Serial.println();
+      //Serial.println();
       if(buflen!=16){                           //If the message length is not equal to 16
        byte data[3];                           //data = {Header, Team/Carrier, Value byte}
        parse(code,data);                       //Parse code into Header, Carrier, Value byte
        if(data[0]==0xA && data[1]<7){ //If Header is equal to 0xA and carrier value exists...
-         Serial.println("Header correct and code not sent from Team member...");
+         //Serial.println("Header correct and code not sent from Team member...");
          carriers[data[1]&0x7](data[1],data[2]);   //Call function corresponding to carrier
 	}
       }
@@ -151,33 +144,19 @@ void parse(long unsigned int signal, byte* data){
   data[0] = (signal>>12)&0x0F;     	    //Header
   data[1] = (signal>>8)&(0x0F);     //Team, Carrier
   data[2] = signal;        	    //Level/Value
-  Serial.println("data[]: Header, Team,Carrier, Level/Value");
-  Serial.println(data[0],HEX);
-  Serial.println(data[1],HEX);
-  Serial.println(data[2],HEX);
+  //Serial.println("data[]: Header, Team,Carrier, Level/Value");
 }
 void Normal(byte carrier, byte value){
-  Serial.println("Normal Damage Received");
+  //Serial.println("Normal Damage Received");
   bool sending_Team = carrier>>7;
   bool bit_sign = value>>7;
   if( ((bit_sign)&&(sending_Team==Team)) || ((!bit_sign)&&(sending_Team!=Team)) ){  //If healing and sent by team member, or if damage and not sent by team member
-    if(!bit_sign){
-      digitalWrite(RED, 1);
-    }
-    else{
-      digitalWrite(GRN, 1);
-    }
     byte sign = 2*(bit_sign);	//0 or 2 -> sign of value will be (-1+sign) = -1 or 1
     value = value&0x7F;           //Grab value of code (0-127)
     Stats[0] = Stats[0] + (-1+sign)*value;  //Health = Health + (-1+sign)(Value) - Add or Subtract Health
-    Serial.print("Health: ");
-    Serial.println(Stats[0], DEC);
-    if(!bit_sign){
-      digitalWrite(RED, 0);
-    }
-    else{
-      digitalWrite(GRN, 0);
-    }
+    lcd.setCursor(1,1);
+    lcd.print("   ");
+    lcd.print(Stats[0]);
   }
 }
 void popStatus(char index){
@@ -189,7 +168,6 @@ void Timed(byte carrier, byte value){
   bool sending_Team = carrier>>7;
   stat.b_db = (value>>4)&0x01;
   if( ((stat.b_db)&&(sending_Team==Team)) || ((!stat.b_db)&&(sending_Team!=Team)) ){  //If healing and sent by team member, or if damage and not sent by team member
-    digitalWrite(BLU, 1);
     stat.index = value>>5;
     stat.level = (value&0x0F);
     stat.num_updates = pow(2,stat.level);
@@ -202,23 +180,17 @@ void Timed(byte carrier, byte value){
 void Buf(byte carrier, byte value){
 }
 void Clear(byte carrier, byte value){
-  digitalWrite(GRN, 1);
   Status temp;			//Create empty Status
   temp.num_updates = 0xFF;
   for(int i = 3; i<6; i++){
     current[i] = temp;		//Clear all status conditions (only debufs)
   }
-  digitalWrite(GRN, 0);
 }
 void Massive(byte carrier, byte value){
-  digitalWrite(RED, 1);
   Stats[0] = Stats[0] - value;	//Health = Health - Value
-  digitalWrite(RED, 0);
 }
 void Special(byte carrier, byte value){
-  digitalWrite(BLU,1);
   delay(1000);
-  digitalWrite(BLU,0);
 
 }
 void Element(byte carrier, byte value){
@@ -228,7 +200,6 @@ void Disable(byte carrier, byte value){
 
 }
 void StatusConditions(){
-digitalWrite(BLU, HIGH);
   char empty_status = 0;
   for(char i=0; i<6; i++){			//Go through all status conditions and accumulate results
     if(current[i].num_updates==0xFF){           //If current[i] does not hold a status, increment empty_status counter and continue to next index
@@ -249,19 +220,15 @@ digitalWrite(BLU, HIGH);
   if(empty_status==6){
     statcon = 0;
   }
-  digitalWrite(BLU,LOW);
 }
 void loop(){
   //Currently, the RF and IR Trigger pins are continuously
   //polled, but later on they will be implemented with 
   //interrupts.
-  Serial.println("polling");
   if(digitalRead(RF_trigger)==HIGH){      //If RF trigger pulled...
-    Serial.println("RF fire");
     RF_fire();
   }
   if(digitalRead(IR_trigger)==HIGH){      //If IR trigger pulled...
-    Serial.println("IR fire");
     IR_fire();
   }
   Get_Damage();              //Detect if IR or RF signal was received
